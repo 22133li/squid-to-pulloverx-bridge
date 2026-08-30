@@ -46,21 +46,22 @@ PRODUCTS_DIR="$BUILD_DIR/products"
 trap 'rm -rf "$BUILD_ROOT"' EXIT
 rm -rf "$BUILD_DIR"; mkdir -p "$PRODUCTS_DIR"; DERIVED="$BUILD_DIR/derived"
 
-xcodebuild -project SquidToPullOverX.xcodeproj \
-  -derivedDataPath "$DERIVED" -configuration "$CONFIGURATION" \
+xcodebuild -project SquidToPullOverX.xcodeproj -target SquidToPullOverX \
+  -configuration "$CONFIGURATION" \
   -sdk iphoneos ARCHS="$ARCHS" VALID_ARCHS="$ARCHS" ONLY_ACTIVE_ARCH=NO \
   POP_SCHEME="$SCHEME" POP_ROOTHIDE_LDFLAGS="$POP_ROOTHIDE_LDFLAGS" \
   POP_SCHEME_DEFS="$POP_SCHEME_DEFS" \
   LD_RUNPATH_SEARCH_PATHS="$POP_RPATHS" \
+  SYMROOT="$BUILD_DIR/build" OBJROOT="$BUILD_DIR/obj" \
   CONFIGURATION_BUILD_DIR="$PRODUCTS_DIR" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   build >/dev/null 2>&1 || {
-    # retry showing errors
-    xcodebuild -project SquidToPullOverX.xcodeproj \
-      -derivedDataPath "$DERIVED" -configuration "$CONFIGURATION" \
+    xcodebuild -project SquidToPullOverX.xcodeproj -target SquidToPullOverX \
+      -configuration "$CONFIGURATION" \
       -sdk iphoneos ARCHS="$ARCHS" VALID_ARCHS="$ARCHS" ONLY_ACTIVE_ARCH=NO \
       POP_SCHEME="$SCHEME" POP_ROOTHIDE_LDFLAGS="$POP_ROOTHIDE_LDFLAGS" \
       POP_SCHEME_DEFS="$POP_SCHEME_DEFS" \
+      SYMROOT="$BUILD_DIR/build" OBJROOT="$BUILD_DIR/obj" \
       CONFIGURATION_BUILD_DIR="$PRODUCTS_DIR" \
       CODE_SIGNING_ALLOWED=NO; exit 1;
   }
