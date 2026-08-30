@@ -16,9 +16,11 @@ jobs:
         run: |
           brew install ldid
           sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
-          curl -sL https://github.com/theos/sdks/archive/refs/heads/master.tar.gz | tar -xz -C /tmp
+          # 下载包含 iPhoneOS15.0.sdk 的 SDK 包
+          curl -sL https://github.com/theos/sdks/archive/master.tar.gz | tar -xz -C /tmp
           sudo mkdir -p /opt/theos/sdks
           sudo cp -r /tmp/sdks-master/*.sdk /opt/theos/sdks/ 2>/dev/null || true
+          ls /opt/theos/sdks/ || true
 
       - name: Patch theos for roothide substrate
         run: |
