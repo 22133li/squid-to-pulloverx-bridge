@@ -15,9 +15,6 @@
 
 #if __has_include(<substrate.h>)
 #include <substrate.h>
-#else
-// 兼容: 依赖运行时 -undefined dynamic_lookup 链接
-extern void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #endif
 
 static BOOL SQBridgeCallerIsSquidGesture(void) {
@@ -82,7 +79,9 @@ static __attribute__((constructor)) void SQBridgeInit(void) {
         if (!cls) return;
         Method m=class_getInstanceMethod(cls,sel);
         if (m){
-            MSHookMessageEx(cls, sel, (IMP)hook_launch, (IMP*)&orig_launch);
+            // 保存原 IMP, 用 class_replaceMethod 覆盖 (不依赖 substrate)
+            orig_launch=(BOOL(*)(id,SEL,id,BOOL))method_getImplementation(m);
+            class_replaceMethod(cls, sel, (IMP)hook_launch, method_getTypeEncoding(m));
             NSLog(@"[SQBridge] hooked %@ -launchApplicationWithIdentifier:suspended:", cn);
             hooked=YES;
         }
