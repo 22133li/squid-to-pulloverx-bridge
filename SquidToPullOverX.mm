@@ -10,9 +10,15 @@
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
-#include <substrate.h>
 #include <dlfcn.h>
 #include <execinfo.h>
+
+#if __has_include(<substrate.h>)
+#include <substrate.h>
+#else
+// 兼容: 依赖运行时 -undefined dynamic_lookup 链接
+extern void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
+#endif
 
 static BOOL SQBridgeCallerIsSquidGesture(void) {
     void *frames[48];
@@ -69,16 +75,20 @@ static BOOL hook_launch(id self, SEL _cmd, id identifier, BOOL suspended) {
 static __attribute__((constructor)) void SQBridgeInit(void) {
     if (!objc_getClass("SpringBoard")) return;
     SEL sel=@selector(launchApplicationWithIdentifier:suspended:);
-    for (NSString *cn in @[@"UIApplication",@"SBWorkspace",@"SpringBoard"]) {
+    __block BOOL hooked=NO;
+    void (^tryHook)(NSString*) = ^(NSString *cn){
+        if (hooked) return;
         Class cls=NSClassFromString(cn);
-        if (!cls) continue;
+        if (!cls) return;
         Method m=class_getInstanceMethod(cls,sel);
         if (m){
-            orig_launch=(BOOL(*)(id,SEL,id,BOOL))method_getImplementation(m);
-            class_replaceMethod(cls,sel,(IMP)hook_launch,method_getTypeEncoding(m));
-            NSLog(@"[SQBridge] hooked %@",cn);
-            break;
+            MSHookMessageEx(cls, sel, (IMP)hook_launch, (IMP*)&orig_launch);
+            NSLog(@"[SQBridge] hooked %@ -launchApplicationWithIdentifier:suspended:", cn);
+            hooked=YES;
         }
-    }
-    NSLog(@"[SQBridge] init done");
+    };
+    tryHook(@"SBWorkspace");
+    tryHook(@"SpringBoard");
+    tryHook(@"UIApplication");
+    if (!hooked) NSLog(@"[SQBridge] WARNING: no host class exposed launchApplicationWithIdentifier:suspended:");
 }
