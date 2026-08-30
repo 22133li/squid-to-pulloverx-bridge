@@ -4,7 +4,6 @@ Version: 1.0
 Description: 让 SquidGesture 原生"在PullOver打开"手势驱动 PullOver X 开小窗 (进程内翻译层)
 Section: Tweaks
 Depends: mobilesubstrate, preferenceloader
-Conflicts:
 Priority: optional
 Architecture: iphoneos-arm64e
 Author: Hermes

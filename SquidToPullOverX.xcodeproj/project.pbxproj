@@ -1,0 +1,144 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B1 /* SquidToPullOverX.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1 /* SquidToPullOverX.mm */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A1 /* SquidToPullOverX.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SquidToPullOverX.mm; sourceTree = "<group>"; };
+		C1 /* SquidToPullOverX.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = SquidToPullOverX.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G1 = {
+			isa = PBXGroup;
+			children = (
+				A1 /* SquidToPullOverX.mm */,
+				C1 /* SquidToPullOverX.dylib */,
+			);
+			sourceTree = "<group>";
+		};
+		G2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C1 /* SquidToPullOverX.dylib */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		T1 /* SquidToPullOverX */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = L1;
+			buildPhases = (
+				S1 /* Sources */,
+				F1 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SquidToPullOverX;
+			productName = SquidToPullOverX;
+			productReference = C1;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		P1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1400;
+			};
+			buildConfigurationList = L0;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = G1;
+			productRefGroup = G2;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				T1,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		S1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1 /* SquidToPullOverX.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		C0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = X1 /* SquidToPullOverX.xcconfig */;
+			buildSettings = {
+				CONFIGURATION_BUILD_DIR = "$(PRODUCTS_DIR)";
+				PRODUCT_NAME = SquidToPullOverX;
+			};
+			name = Debug;
+		};
+		C1c /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = X1 /* SquidToPullOverX.xcconfig */;
+			buildSettings = {
+				CONFIGURATION_BUILD_DIR = "$(PRODUCTS_DIR)";
+				PRODUCT_NAME = SquidToPullOverX;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		L0 /* Build configuration list for PBXProject */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0,
+				C1c,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		L1 /* Build configuration list for PBXNativeTarget */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0,
+				C1c,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = P1;
+}

@@ -1,6 +1,4 @@
-# Build SquidToPullOverX (roothide), macOS runner
 name: build
-
 on:
   push:
     branches: [ "**" ]
@@ -12,21 +10,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Theos + ldid
+      - name: Install Theos + ldid + dpkg
         run: |
-          brew install ldid
+          brew install ldid dpkg
+          sudo mkdir -p /opt
           sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
-          # 下载包含 iPhoneOS15.0.sdk 的 SDK 包
+          # SDK 15.6
           curl -sL https://github.com/theos/sdks/archive/master.tar.gz | tar -xz -C /tmp
           sudo mkdir -p /opt/theos/sdks
+          sudo cp -r /tmp/sdks-master/iPhoneOS15.6.sdk /opt/theos/sdks/ 2>/dev/null || \
           sudo cp -r /tmp/sdks-master/*.sdk /opt/theos/sdks/ 2>/dev/null || true
-          ls /opt/theos/sdks/ || true
+          echo "SDKs:"; ls /opt/theos/sdks/ | grep iPhone || true
+          echo "$(brew --prefix)/bin" >> $GITHUB_PATH
 
-      - name: Patch theos for roothide substrate
+      - name: Inject roothide substrate tbd
         run: |
           sudo mkdir -p /opt/theos/vendor/lib/iphone/roothide
-          echo "building with rootless scheme -> uses CydiaSubstrate via substrate tbds; ensure standard"
-          ls /opt/theos/sdks/ | head
+          sudo cp libsubstrate-roothide.tbd /opt/theos/vendor/lib/iphone/roothide/libsubstrate.tbd
+          echo "injected roothide libsubstrate.tbd"
 
       - name: Select Xcode
         run: |
@@ -34,21 +35,20 @@ jobs:
           sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
           xcodebuild -version
 
-      - name: Install dpkg
+      - name: Build (roothide)
         run: |
-          brew install dpkg
-          echo "$(brew --prefix)/bin" >> $GITHUB_PATH
+          chmod +x build.sh
+          ./build.sh roothide release
 
-      - name: Build
+      - name: Collect
         run: |
-          export THEOS=/opt/theos
-          make package FINALPACKAGE=1
-          # force arch in deb control to arm64e
-          find . -name "*.deb" -print
+          mkdir -p output
+          find . -name "*.deb" -path "*packages*" -exec cp {} output/ \;
+          ls -la output/
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: squidtopulloverx-deb
-          path: packages/*.deb
+          name: squidtopulloverx-roothide-deb
+          path: output/*.deb
           if-no-files-found: error
