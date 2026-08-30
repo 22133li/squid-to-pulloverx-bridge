@@ -41,13 +41,14 @@ static BOOL SQBridgeOpenInPullOver(NSString *bundleId) {
     if (bundleId.length==0) return NO;
     Class wc=NSClassFromString(@"PullOverWindow");
     if (!wc) return NO;
-    id window=[wc performSelector:NSSelectorFromString(@"sharedWindow")];
+    id (*sw)(id,SEL) = (id(*)(id,SEL))objc_msgSend;
+    id window = sw(wc, sel_registerName("sharedWindow"));
     if (!window) return NO;
     id ctrl=[window valueForKey:@"controller"];
     if (!ctrl) return NO;
     SEL pin=@selector(pinAppWithBundleId:);
     if ([(NSObject*)ctrl respondsToSelector:pin]){
-        [ctrl performSelector:pin withObject:bundleId];
+        ((void(*)(id,SEL,id))objc_msgSend)(ctrl, pin, bundleId);
         return YES;
     }
     return NO;
