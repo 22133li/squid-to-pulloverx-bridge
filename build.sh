@@ -76,7 +76,11 @@ cp "$DYLIB" "$ROOT/Library/MobileSubstrate/DynamicLibraries/SquidToPullOverX.dyl
 cp "SquidToPullOverX.plist" "$ROOT/Library/MobileSubstrate/DynamicLibraries/SquidToPullOverX.plist"
 
 mkdir -p "$STAGE/DEBIAN"
-sed -E "s/^Architecture:.*/Architecture: $DEB_ARCH/" control > "$STAGE/DEBIAN/control"
+# control 已按当前 scheme (roothide) 写好; 这里按需重写 Architecture
+awk -v arch="$DEB_ARCH" '{
+    if ($1=="Architecture:") print "Architecture: " arch;
+    else print;
+}' control > "$STAGE/DEBIAN/control"
 
 mkdir -p packages
 VERSION="$(sed -n 's/^Version:[[:space:]]*//p' "$STAGE/DEBIAN/control" | tr -d '\r')"
