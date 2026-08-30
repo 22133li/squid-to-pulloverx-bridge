@@ -1,0 +1,52 @@
+# Build SquidToPullOverX (roothide), macOS runner
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Theos + ldid
+        run: |
+          brew install ldid
+          sudo git clone --recursive https://github.com/theos/theos.git /opt/theos
+          curl -sL https://github.com/theos/sdks/archive/refs/heads/master.tar.gz | tar -xz -C /tmp
+          sudo mkdir -p /opt/theos/sdks
+          sudo cp -r /tmp/sdks-master/*.sdk /opt/theos/sdks/ 2>/dev/null || true
+
+      - name: Patch theos for roothide substrate
+        run: |
+          sudo mkdir -p /opt/theos/vendor/lib/iphone/roothide
+          echo "building with rootless scheme -> uses CydiaSubstrate via substrate tbds; ensure standard"
+          ls /opt/theos/sdks/ | head
+
+      - name: Select Xcode
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install dpkg
+        run: |
+          brew install dpkg
+          echo "$(brew --prefix)/bin" >> $GITHUB_PATH
+
+      - name: Build
+        run: |
+          export THEOS=/opt/theos
+          make package FINALPACKAGE=1
+          # force arch in deb control to arm64e
+          find . -name "*.deb" -print
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: squidtopulloverx-deb
+          path: packages/*.deb
+          if-no-files-found: error
