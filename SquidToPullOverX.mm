@@ -1,15 +1,12 @@
 /*
- * SquidToPullOverX.mm — 翻译层 v2
+ * SquidToPullOverX.mm — 翻译层 v3 (文件日志版)
  *
- * 根因 (已验证):
- *   SquidGesture 原生"在PullOver打开" → 直接调
- *      PullOverWindow.sharedWindow.controller.pinAppWithBundleId:
- *   但 PullOver X 窗口需 init (initWithWindowScene:) 后才可用; 未初始化则
- *   sharedWindow 返回 nil / window 未绑定, pinApp 无效果 → 手势"没反应".
+ * 目标: 让 SquidGesture 原生"在PullOver打开"手势驱动 PullOver X 开小窗。
+ *   根因(已验证): SquidGesture 直接调 PullOverWindow.sharedWindow.controller.pinAppWithBundleId:,
+ *   但 PullOver X 窗口需 initWithWindowScene: 初始化后才有用; 未初始化则静默失败。
  *
- * 方案: hook PullOverWindow 的 -sharedWindow (类方法), 一旦被调用即确保窗口
- *   已初始化并绑定 main scene, 保证返回值可用; hook controller.pinAppWithBundleId:
- *   记录日志确认调用链. 纯 runtime, 不依赖 substrate 链接.
+ * 本版核心改进: 所有日志写入 /var/mobile/Documents/SQBridge.log (Filza 可打开),
+ *   解决"看不到 SpringBoard 日志"的堵点, 拿决定性运行数据。
  */
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -17,70 +14,93 @@
 #import <objc/runtime.h>
 #include <dlfcn.h>
 #include <execinfo.h>
+#include <stdio.h>
+#include <time.h>
+
+static NSString *SQBridgeLogPath(void) {
+    return @"/var/mobile/Documents/SQBridge.log";
+}
+
+void SQBridgeWrite(NSString *msg) {
+    // 追加写文件
+    NSString *line = [msg stringByAppendingString:@"\n"];
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:SQBridgeLogPath()];
+    if (!fh) {
+        [line writeToFile:SQBridgeLogPath() atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    } else {
+        @try { [fh seekToEndOfFile]; [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]]; [fh closeFile]; }
+        @catch(NSException *e) {}
+    }
+    // 同时给系统日志
+    NSLog(@"[SQBridge] %@", msg);
+}
 
 static void SQBridgeLog(NSString *fmt, ...) {
     va_list ap; va_start(ap, fmt);
     NSString *msg = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
-    NSLog(@"[SQBridge] %@", msg);
+    // 加时间戳
+    time_t now = time(NULL);
+    struct tm tm; localtime_r(&now, &tm);
+    char tbuf[32]; strftime(tbuf, sizeof(tbuf), "%H:%M:%S", &tm);
+    SQBridgeWrite([NSString stringWithFormat:@"%s %@", tbuf, msg]);
 }
 
 /* 确保 PullOver X 窗口已初始化并绑定主 scene */
 static id SQBridgeEnsurePullOverWindow(void) {
     Class wc = NSClassFromString(@"PullOverWindow");
-    if (!wc) { SQBridgeLog(@"PullOverWindow class not found"); return nil; }
+    if (!wc) { SQBridgeLog(@"PullOverWindow class NOT found"); return nil; }
     id (*getWindow)(id,SEL) = (id(*)(id,SEL))objc_msgSend;
-    SEL sshared = sel_registerName("sharedWindow");
-    id window = getWindow(wc, sshared);
-    if (!window) {
-        SQBridgeLog(@"sharedWindow returned nil; trying init");
-        // 尝试创建: PullOverWindow 有 +sharedInstance? 或先 +sharedWindow 再 ensure。
-        // 尝试通过 UIWindowScene
-        id scene = nil;
-        // 取当前 keyWindow 的 windowScene
-        id app = ((id(*)(id,SEL))objc_msgSend)(NSClassFromString(@"UIApplication"), sel_registerName("sharedApplication"));
-        id keyWin = app ? getWindow(app, sel_registerName("keyWindow")) : nil;
-        if (keyWin) scene = [keyWin valueForKey:@"windowScene"];
-        if (!scene) {
-            // fallback: 遍历 windows
-            NSArray *wins = [app valueForKey:@"windows"];
-            for (id w in wins) { id ws=[w valueForKey:@"windowScene"]; if (ws) { scene=ws; break; } }
+    id window = getWindow(wc, sel_registerName("sharedWindow"));
+    if (window) {
+        id ctrl = [window valueForKey:@"controller"];
+        SQBridgeLog(@"sharedWindow OK -> %@ controller=%@", window, ctrl);
+        if (!ctrl) {
+            // controller 未建, 尝试触发窗口 build
         }
-        if (scene) {
-            window = [[wc alloc] initWithWindowScene:scene];
-            SQBridgeLog(@"created PullOverWindow with scene");
-        } else {
-            SQBridgeLog(@"no window scene available");
-        }
-        // 置回单例 (如果共有 setter/shared setter)
-        // PullOverX internal stores; if sharedWindow caches, it'll return on next call.
+        return [window valueForKey:@"controller"] ?: (id)nil;
+    }
+    SQBridgeLog(@"sharedWindow nil; attempting init");
+    id app = ((id(*)(id,SEL))objc_msgSend)(NSClassFromString(@"UIApplication"), sel_registerName("sharedApplication"));
+    id keyWin = app ? ((id(*)(id,SEL))objc_msgSend)(app, sel_registerName("keyWindow")) : nil;
+    id scene = keyWin ? [keyWin valueForKey:@"windowScene"] : nil;
+    if (!scene) {
+        NSArray *wins = [app valueForKey:@"windows"];
+        for (id w in wins) { id ws=[w valueForKey:@"windowScene"]; if (ws){ scene=ws; break; } }
+    }
+    if (scene) {
+        window = [(id)wc alloc]; window = ((id(*)(id,SEL,id))objc_msgSend)(window, sel_registerName("initWithWindowScene:"), scene);
+        SQBridgeLog(@"initWithWindowScene: -> %@", window);
+        // 尝试存回单例: PullOverWindow 若有 setSharedWindow / controller 就 bind
     } else {
-        SQBridgeLog(@"sharedWindow returned existing window %@", window);
+        SQBridgeLog(@"no window scene available");
     }
     return window;
 }
 
-/* ---- hook PullOverWindow +sharedWindow (类方法) ---- */
+/* ---- hooks ---- */
 static id (*orig_sharedWindow)(id,SEL);
 static id hook_sharedWindow(id self, SEL _cmd) {
     id w = orig_sharedWindow ? orig_sharedWindow(self,_cmd) : nil;
     SQBridgeLog(@"+sharedWindow called -> %@", w);
-    return w;
+    if (!w) {
+        w = SQBridgeEnsurePullOverWindow();
+        SQBridgeLog(@"+sharedWindow ensured -> %@", w);
+    }
+    return w ?: w;
 }
 
-/* ---- hook PullOverViewController -pinAppWithBundleId: ---- */
 static void (*orig_pinApp)(id,SEL,id);
 static void hook_pinApp(id self, SEL _cmd, id bundleId) {
     SQBridgeLog(@"-pinAppWithBundleId: %@", bundleId);
-    SQBridgeEnsurePullOverWindow();  // 确保窗口就绪
+    SQBridgeEnsurePullOverWindow();
     if (orig_pinApp) orig_pinApp(self,_cmd,bundleId);
 }
 
-/* ---- hook PullOverWindow -initWithWindowScene: (记日志) ---- */
 static id (*orig_initScene)(id,SEL,id);
 static id hook_initScene(id self, SEL _cmd, id scene) {
-    id r = orig_initScene ? orig_initScene(self,_cmd,scene) : nil;
     SQBridgeLog(@"-initWithWindowScene: called");
+    id r = orig_initScene ? orig_initScene(self,_cmd,scene) : nil;
     return r;
 }
 
@@ -89,10 +109,9 @@ static void SQBridgeHookClassMethod(Class cls, SEL sel, IMP hook, IMP *orig) {
     Method m = class_getClassMethod(cls, sel);
     if (m) {
         *orig = method_getImplementation(m);
-        // 类方法存在是在 metaclass 上
         class_replaceMethod(object_getClass(cls), sel, hook, method_getTypeEncoding(m));
         SQBridgeLog(@"hooked +%@", NSStringFromSelector(sel));
-    }
+    } else SQBridgeLog(@"NO +%@", NSStringFromSelector(sel));
 }
 static void SQBridgeHookInstance(Class cls, SEL sel, IMP hook, IMP *orig) {
     if (!cls || !sel) return;
@@ -101,27 +120,28 @@ static void SQBridgeHookInstance(Class cls, SEL sel, IMP hook, IMP *orig) {
         *orig = method_getImplementation(m);
         class_replaceMethod(cls, sel, hook, method_getTypeEncoding(m));
         SQBridgeLog(@"hooked -%@", NSStringFromSelector(sel));
-    }
+    } else SQBridgeLog(@"NO -%@", NSStringFromSelector(sel));
 }
 
 static __attribute__((constructor)) void SQBridgeInit(void) {
-    if (!objc_getClass("SpringBoard")) return;
-    SQBridgeLog(@"init (SpringBoard)");
-    Class pullWin = NSClassFromString(@"PullOverWindow");
-    if (pullWin) {
-        SQBridgeHookClassMethod(pullWin, sel_registerName("sharedWindow"),
-                                (IMP)hook_sharedWindow, (IMP*)&orig_sharedWindow);
-    } else {
-        SQBridgeLog(@"PullOverWindow class not present at init");
+    // 先清空旧日志
+    [[NSFileManager defaultManager] removeItemAtPath:SQBridgeLogPath() error:nil];
+    [@"" writeToFile:SQBridgeLogPath() atomically:NO encoding:NSUTF8StringEncoding error:nil];
+    SQBridgeLog(@"=== SQBridge v3 init (process=%@) ===", NSProcessInfo.processInfo.processName);
+    if (!objc_getClass("SpringBoard")) {
+        SQBridgeLog(@"NOT in SpringBoard, skip hooks");
+        return;
     }
+    SQBridgeLog(@"in SpringBoard; classes: PullOverWindow=%@ PullOverViewController=%@ SquidGesture=%@",
+        NSClassFromString(@"PullOverWindow"), NSClassFromString(@"PullOverViewController"),
+        NSClassFromString(@"SquidGesturePro") ?: (id)@"?");
+    Class pullWin = NSClassFromString(@"PullOverWindow");
+    if (pullWin)
+        SQBridgeHookClassMethod(pullWin, sel_registerName("sharedWindow"), (IMP)hook_sharedWindow, (IMP*)&orig_sharedWindow);
     Class pullVC = NSClassFromString(@"PullOverViewController");
     if (pullVC) {
-        SQBridgeHookInstance(pullVC, sel_registerName("pinAppWithBundleId:"),
-                             (IMP)hook_pinApp, (IMP*)&orig_pinApp);
-        SQBridgeHookInstance(pullVC, sel_registerName("initWithWindowScene:"),
-                             (IMP)hook_initScene, (IMP*)&orig_initScene);
-    } else {
-        SQBridgeLog(@"PullOverViewController class not present at init");
+        SQBridgeHookInstance(pullVC, sel_registerName("pinAppWithBundleId:"), (IMP)hook_pinApp, (IMP*)&orig_pinApp);
+        SQBridgeHookInstance(pullVC, sel_registerName("initWithWindowScene:"), (IMP)hook_initScene, (IMP*)&orig_initScene);
     }
-    SQBridgeLog(@"init done");
+    SQBridgeLog(@"init done; hooks active");
 }
