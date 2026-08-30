@@ -32,7 +32,7 @@ LIBRARY_SEARCH_PATHS = $(inherited) $(THEOS)/vendor/lib/iphone/$(POP_SCHEME) $(D
 POP_SCHEME_DEFS = THEOS_PACKAGE_SCHEME_ROOTHIDE=1
 GCC_PREPROCESSOR_DEFINITIONS = $(inherited) $(POP_SCHEME_DEFS)
 
-OTHER_LDFLAGS = $(inherited) -undefined dynamic_lookup -lroothide -lsubstrate
+OTHER_LDFLAGS = $(inherited) -undefined dynamic_lookup
 
 GCC_GENERATE_DEBUGGING_SYMBOLS = NO
 GCC_SYMBOLS_PRIVATE_EXTERN = YES
