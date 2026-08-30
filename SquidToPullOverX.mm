@@ -34,7 +34,9 @@ static BOOL SQBridgeCallerIsSquidGesture(void) {
 }
 
 static NSString *SQBridgeFrontMostBundleId(void) {
-    id app=[[UIApplication sharedApplication] valueForKey:@"_accessibilityFrontMostApplication"];
+    Class UIApp = NSClassFromString(@"UIApplication");
+    id shared = UIApp ? ((id(*)(id,SEL))objc_msgSend)(UIApp, sel_registerName("sharedApplication")) : nil;
+    id app = [shared valueForKey:@"_accessibilityFrontMostApplication"];
     if (app && [(NSObject*)app respondsToSelector:@selector(bundleIdentifier)])
         return [app valueForKey:@"bundleIdentifier"];
     return nil;
