@@ -61,7 +61,8 @@ static BOOL hook_launch_id(id self,SEL _cmd,id bid,BOOL suspended){
 static id (*orig_sharedWindow)(id,SEL);
 static id hook_sharedWindow(id self,SEL _cmd){
     id w=orig_sharedWindow?orig_sharedWindow(self,_cmd):nil;
-    SQBridgeLog(@"HOOK +sharedWindow -> %@", w);
+    id ctrl=w?[w valueForKey:@"controller"]:nil;
+    SQBridgeLog(@"HOOK +sharedWindow -> %@  controller=%@", w, ctrl);
     return w;
 }
 static void (*orig_pinApp)(id,SEL,id);
@@ -75,6 +76,18 @@ static void hook_openTmp(id self,SEL _cmd,id bid,id ul,BOOL nat,id cb){
     SQBridgeLog(@"HOOK openTemporaryAppWithBundleId: %@ native=%d", bid,nat);
     SQBStack();
     if(orig_openTmp) orig_openTmp(self,_cmd,bid,ul,nat,cb);
+}
+/* SquidGesture 拿到 sharedWindow 后可能直接调展开方法 */
+static void (*orig_vc_open)(id,SEL);
+static void hook_vc_open(id self,SEL _cmd){
+    SQBridgeLog(@"HOOK PullOverViewController -open");
+    SQBStack();
+    if(orig_vc_open) orig_vc_open(self,_cmd);
+}
+static void (*orig_vc_close)(id,SEL);
+static void hook_vc_close(id self,SEL _cmd){
+    SQBridgeLog(@"HOOK PullOverViewController -close");
+    if(orig_vc_close) orig_vc_close(self,_cmd);
 }
 
 static void SQBridgeHookInstance(Class cls,SEL sel,IMP hook,IMP*orig){
@@ -114,6 +127,8 @@ static __attribute__((constructor)) void SQBridgeInit(void) {
     if(pullVC){
         SQBridgeHookInstance(pullVC, sel_registerName("pinAppWithBundleId:"),(IMP)hook_pinApp,(IMP*)&orig_pinApp);
         SQBridgeHookInstance(pullVC, sel_registerName("openTemporaryAppWithBundleId:universalLink:nativeExternalActivation:completion:"),(IMP)hook_openTmp,(IMP*)&orig_openTmp);
+        SQBridgeHookInstance(pullVC, sel_registerName("open"),(IMP)hook_vc_open,(IMP*)&orig_vc_open);
+        SQBridgeHookInstance(pullVC, sel_registerName("close"),(IMP)hook_vc_close,(IMP*)&orig_vc_close);
     }
     SQBridgeLog(@"probe init done");
 }
