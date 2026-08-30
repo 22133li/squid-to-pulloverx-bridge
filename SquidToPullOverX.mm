@@ -16,6 +16,31 @@
 
 static NSString *Path(void){ return @"/var/mobile/Documents/SQBridge.log"; }
 
+/* 检测调用栈是否来自 SquidGesture */
+static BOOL SQBridgeCallerIsSquidGesture(void) {
+    void *fr[48]; int n=backtrace(fr,48);
+    for(int i=1;i<n;i++){
+        Dl_info di;
+        if(dladdr(fr[i],&di)&&di.dli_fname){
+            NSString *p=[NSString stringWithUTF8String:di.dli_fname];
+            if([p rangeOfString:@"SquidGesture" options:NSCaseInsensitiveSearch].location!=NSNotFound ||
+               [p rangeOfString:@"squidgesturepro" options:NSCaseInsensitiveSearch].location!=NSNotFound){
+                return YES;
+            }
+        }
+    }
+    return NO;
+}
+/* 取当前前台 App bundleId */
+static NSString *SQBridgeFrontMostBundleId(void) {
+    Class UIApp=NSClassFromString(@"UIApplication");
+    id shared=UIApp?((id(*)(id,SEL))objc_msgSend)(UIApp,sel_registerName("sharedApplication")):nil;
+    id app=[shared valueForKey:@"_accessibilityFrontMostApplication"];
+    if(app&&[(NSObject*)app respondsToSelector:@selector(bundleIdentifier)])
+        return [app valueForKey:@"bundleIdentifier"];
+    return nil;
+}
+
 static void SQBridgeWrite(NSString *msg) {
     NSString *line=[msg stringByAppendingString:@"\n"];
     NSFileHandle *fh=[NSFileHandle fileHandleForWritingAtPath:Path()];
@@ -63,6 +88,28 @@ static id hook_sharedWindow(id self,SEL _cmd){
     id w=orig_sharedWindow?orig_sharedWindow(self,_cmd):nil;
     id ctrl=w?[w valueForKey:@"controller"]:nil;
     SQBridgeLog(@"HOOK +sharedWindow -> %@  controller=%@", w, ctrl);
+    // 检测调用者是 SquidGesture → openNewApp意图
+    BOOL fromSquid = SQBridgeCallerIsSquidGesture();
+    SQBridgeLog(@"(caller is SquidGesture=%d)", fromSquid);
+    if (fromSquid && ctrl) {
+        NSString *bid = SQBridgeFrontMostBundleId();
+        SQBridgeLog(@"SquidGesture wants PaintOver; frontmost=%@", bid);
+        if (bid.length) {
+            // 主动替 SquidGesture 完成开窗: 走 PullOver X 认识的 openTemporary
+            SEL ot = sel_registerName("openTemporaryAppWithBundleId:universalLink:nativeExternalActivation:completion:");
+            if ([(NSObject*)ctrl respondsToSelector:ot]) {
+                ((void(*)(id,SEL,id,id,BOOL,id))objc_msgSend)(ctrl, ot, bid, nil, NO, nil);
+                SQBridgeLog(@"-> called openTemporary %@ (forced for SquidGesture)", bid);
+            } else {
+                // fallback pinApp
+                SEL pa=@selector(pinAppWithBundleId:);
+                if ([(NSObject*)ctrl respondsToSelector:pa]) {
+                    ((void(*)(id,SEL,id))objc_msgSend)(ctrl, pa, bid);
+                    SQBridgeLog(@"-> called pinApp %@ (forced)", bid);
+                }
+            }
+        }
+    }
     return w;
 }
 static void (*orig_pinApp)(id,SEL,id);
