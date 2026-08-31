@@ -52,6 +52,38 @@ static NSString *SQBridgeFrontMostBundleId(void) {
     return nil;
 }
 
+/* 从 bundleId 取 App 的第一个 URL scheme (如 weixin://) */
+static NSString *SQBridgeSchemeForBundle(NSString *bundleId) {
+    if (bundleId.length == 0) return nil;
+    // LSApplicationProxy 拿 app 注册的 URL schemes
+    Class proxyCls = NSClassFromString(@"LSApplicationProxy");
+    if (proxyCls) {
+        id proxy = ((id(*)(id,SEL,id))objc_msgSend)(proxyCls, sel_registerName("applicationProxyForIdentifier:"), bundleId);
+        if (proxy) {
+            id schemes = [proxy valueForKey:@"bundleURL"];
+            schemes = [schemes valueForKey:@"URLSchemes"];
+            if ([schemes isKindOfClass:NSArray.class] && [schemes count] > 0) {
+                NSString *s = schemes[0];
+                if ([s isKindOfClass:NSString.class] && [s length])
+                    return [s stringByAppendingString:@"://"];
+            }
+        }
+    }
+    return nil;
+}
+
+/* 用 openURL(scheme) 走系统 URL 路由(已验证稳定,不会触发临时 close) */
+static void SQBridgeOpenURLScheme(NSString *scheme) {
+    if (scheme.length == 0) return;
+    SQBridgeLog(@"openURL(scheme): %@", scheme);
+    Class UIApp = NSClassFromString(@"UIApplication");
+    id shared = UIApp ? ((id(*)(id,SEL))objc_msgSend)(UIApp, sel_registerName("sharedApplication")) : nil;
+    if (shared) {
+        id url = [[NSClassFromString(@"NSURL") alloc] initWithString:scheme];
+        ((void(*)(id,SEL,id,id,id))objc_msgSend)(shared, sel_registerName("openURL:options:completionHandler:"), url, @{}, nil);
+    }
+}
+
 /* ---- 核心: hook +sharedWindow ---- */
 static id (*orig_sharedWindow)(id,SEL);
 static id hook_sharedWindow(id self,SEL _cmd){
@@ -71,15 +103,17 @@ static id hook_sharedWindow(id self,SEL _cmd){
                 NSString *bid = SQBridgeFrontMostBundleId();
                 SQBridgeLog(@"fallback trigger; frontmost=%@", bid);
                 if (bid.length) {
-                    SEL ot = sel_registerName("openTemporaryAppWithBundleId:universalLink:nativeExternalActivation:completion:");
-                    if ([(NSObject*)ctrl respondsToSelector:ot]) {
-                        SQBridgeLog(@"calling openTemporary %@ (native=0)", bid);
-                        ((void(*)(id,SEL,id,id,BOOL,id))objc_msgSend)(ctrl, ot, bid, nil, NO, nil);
+                    // B 方案: 转成 URL scheme 走系统路由(PullOver 稳定处理)
+                    NSString *scheme = SQBridgeSchemeForBundle(bid);
+                    SQBridgeLog(@"bundle %@ -> scheme %@", bid, scheme);
+                    if (scheme.length) {
+                        SQBridgeOpenURLScheme(scheme);
                     } else {
-                        SEL pa=@selector(pinAppWithBundleId:);
-                        if ([(NSObject*)ctrl respondsToSelector:pa]) {
-                            SQBridgeLog(@"calling pinApp %@", bid);
-                            ((void(*)(id,SEL,id))objc_msgSend)(ctrl, pa, bid);
+                        // 无 scheme 才退回直接进程内 openTemporary(尽力而为)
+                        SEL ot = sel_registerName("openTemporaryAppWithBundleId:universalLink:nativeExternalActivation:completion:");
+                        if ([(NSObject*)ctrl respondsToSelector:ot]) {
+                            SQBridgeLog(@"no scheme; direct openTemporary %@", bid);
+                            ((void(*)(id,SEL,id,id,BOOL,id))objc_msgSend)(ctrl, ot, bid, nil, NO, nil);
                         }
                     }
                 }

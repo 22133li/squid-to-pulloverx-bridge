@@ -1,5 +1,5 @@
 Package: com.mlgm.squidtopulloverx
-Version: 1.0.8
+Version: 1.0.9
 Description: 让 SquidGesture 原生的在PullOver打开手势驱动 PullOver X 开小窗 (进程内翻译层)
 Section: Tweaks
 Depends: mobilesubstrate, preferenceloader
