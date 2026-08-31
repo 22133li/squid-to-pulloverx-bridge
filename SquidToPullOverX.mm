@@ -88,27 +88,31 @@ static id hook_sharedWindow(id self,SEL _cmd){
     id w=orig_sharedWindow?orig_sharedWindow(self,_cmd):nil;
     id ctrl=w?[w valueForKey:@"controller"]:nil;
     SQBridgeLog(@"HOOK +sharedWindow -> %@  controller=%@", w, ctrl);
-    // 检测调用者是 SquidGesture → openNewApp意图
-    BOOL fromSquid = SQBridgeCallerIsSquidGesture();
-    SQBridgeLog(@"(caller is SquidGesture=%d)", fromSquid);
-    if (fromSquid && ctrl) {
-        NSString *bid = SQBridgeFrontMostBundleId();
-        SQBridgeLog(@"SquidGesture wants PaintOver; frontmost=%@", bid);
-        if (bid.length) {
-            // 主动替 SquidGesture 完成开窗: 走 PullOver X 认识的 openTemporary
-            SEL ot = sel_registerName("openTemporaryAppWithBundleId:universalLink:nativeExternalActivation:completion:");
-            if ([(NSObject*)ctrl respondsToSelector:ot]) {
-                ((void(*)(id,SEL,id,id,BOOL,id))objc_msgSend)(ctrl, ot, bid, nil, NO, nil);
-                SQBridgeLog(@"-> called openTemporary %@ (forced for SquidGesture)", bid);
-            } else {
-                // fallback pinApp
-                SEL pa=@selector(pinAppWithBundleId:);
-                if ([(NSObject*)ctrl respondsToSelector:pa]) {
-                    ((void(*)(id,SEL,id))objc_msgSend)(ctrl, pa, bid);
-                    SQBridgeLog(@"-> called pinApp %@ (forced)", bid);
+    // 不依赖 caller 检测(SquidGesture 经 substrate 调用栈不可见)。
+    // 延迟检查: 若 controller 未自动进入打开态, 用当前前台 App 强制兜底开窗。
+    if (ctrl) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            NSNumber *opened = [ctrl valueForKey:@"isOpened"];
+            BOOL isOpen = [opened boolValue];
+            if (!isOpen) {
+                NSString *bid = SQBridgeFrontMostBundleId();
+                SQBridgeLog(@"sharedWindow no auto-open; fallback frontmost=%@", bid);
+                if (bid.length) {
+                    SEL ot = sel_registerName("openTemporaryAppWithBundleId:universalLink:nativeExternalActivation:completion:");
+                    if ([(NSObject*)ctrl respondsToSelector:ot]) {
+                        ((void(*)(id,SEL,id,id,BOOL,id))objc_msgSend)(ctrl, ot, bid, nil, NO, nil);
+                        SQBridgeLog(@"-> fallback openTemporary %@", bid);
+                    } else {
+                        SEL pa=@selector(pinAppWithBundleId:);
+                        if ([(NSObject*)ctrl respondsToSelector:pa]) {
+                            ((void(*)(id,SEL,id))objc_msgSend)(ctrl, pa, bid);
+                            SQBridgeLog(@"-> fallback pinApp %@", bid);
+                        }
+                    }
                 }
             }
-        }
+        });
     }
     return w;
 }
