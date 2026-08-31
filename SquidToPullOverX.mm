@@ -115,15 +115,16 @@ static id hook_sharedWindow(id self,SEL _cmd){
                 NSString *bid = SQBridgeFrontMostBundleId();
                 SQBridgeLog(@"sharedWindow no auto-open; fallback frontmost=%@", bid);
                 if (bid.length) {
-                    SEL ot = sel_registerName("openTemporaryAppWithBundleId:universalLink:nativeExternalActivation:completion:");
-                    if ([(NSObject*)ctrl respondsToSelector:ot]) {
-                        ((void(*)(id,SEL,id,id,BOOL,id))objc_msgSend)(ctrl, ot, bid, nil, NO, nil);
-                        SQBridgeLog(@"-> fallback openTemporary %@", bid);
+                    // 用 pinApp(持久钉住) 替代 openTemporary(临时, 会开完即自动收起)
+                    SEL pa=@selector(pinAppWithBundleId:);
+                    if ([(NSObject*)ctrl respondsToSelector:pa]) {
+                        ((void(*)(id,SEL,id))objc_msgSend)(ctrl, pa, bid);
+                        SQBridgeLog(@"-> fallback pinApp %@", bid);
                     } else {
-                        SEL pa=@selector(pinAppWithBundleId:);
-                        if ([(NSObject*)ctrl respondsToSelector:pa]) {
-                            ((void(*)(id,SEL,id))objc_msgSend)(ctrl, pa, bid);
-                            SQBridgeLog(@"-> fallback pinApp %@", bid);
+                        SEL ot = sel_registerName("openTemporaryAppWithBundleId:universalLink:nativeExternalActivation:completion:");
+                        if ([(NSObject*)ctrl respondsToSelector:ot]) {
+                            ((void(*)(id,SEL,id,id,BOOL,id))objc_msgSend)(ctrl, ot, bid, nil, NO, nil);
+                            SQBridgeLog(@"-> fallback openTemporary %@", bid);
                         }
                     }
                 }
