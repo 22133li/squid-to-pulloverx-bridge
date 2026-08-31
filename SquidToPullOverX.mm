@@ -31,13 +31,29 @@ static BOOL SQBridgeCallerIsSquidGesture(void) {
     }
     return NO;
 }
-/* 取当前前台 App bundleId */
+/* 取当前前台 App bundleId — 优先复用 PullOver X 自己的 frontMostBundleId(验证过可靠) */
 static NSString *SQBridgeFrontMostBundleId(void) {
+    Class helper=NSClassFromString(@"POApplicationHelper");
+    if(helper && [helper respondsToSelector:NSSelectorFromString(@"frontMostBundleId")]){
+        id bid=((id(*)(id,SEL))objc_msgSend)(helper, NSSelectorFromString(@"frontMostBundleId"));
+        if([bid isKindOfClass:NSString.class] && [bid length]) return bid;
+    }
+    // fallback: accessibilityFrontmost
     Class UIApp=NSClassFromString(@"UIApplication");
     id shared=UIApp?((id(*)(id,SEL))objc_msgSend)(UIApp,sel_registerName("sharedApplication")):nil;
     id app=[shared valueForKey:@"_accessibilityFrontMostApplication"];
     if(app&&[(NSObject*)app respondsToSelector:@selector(bundleIdentifier)])
         return [app valueForKey:@"bundleIdentifier"];
+    // final fallback: SBApplicationController
+    Class sbAppCtl=NSClassFromString(@"SBApplicationController");
+    if(sbAppCtl){
+        id ctl=((id(*)(id,SEL))objc_msgSend)(sbAppCtl, NSSelectorFromString(@"sharedInstanceIfExists")) ?:
+               ((id(*)(id,SEL))objc_msgSend)(sbAppCtl, NSSelectorFromString(@"sharedInstance"));
+        id fa=[ctl valueForKey:@"_accessibilityFrontMostSuspendedApplication"] ?:
+              [ctl valueForKey:@"frontmostApplication"];
+        if(fa&&[(NSObject*)fa respondsToSelector:@selector(bundleIdentifier)])
+            return [fa valueForKey:@"bundleIdentifier"];
+    }
     return nil;
 }
 
